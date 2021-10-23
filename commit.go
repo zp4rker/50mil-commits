@@ -18,6 +18,7 @@ func main() {
 	amount := flag.Int("amount", 10000000, "the amount of commits to go up to")
 	finalCommitMsg = flag.String("final-commit", "default", "the message for the final commit")
 	emptyMessages := flag.Bool("empty-messages", false, "whether or not to use empty commit messages")
+	ignoreHistory := flag.Bool("ignore-history", false, "whether or not to calculate the commit ammount from history")
 	flag.Parse()
 
 	if *finalCommitMsg == "default" {
@@ -40,21 +41,23 @@ func main() {
 
 	// check if started before
 	started := false
-	fmt.Print("\033[2K\rChecking if already started...")
-	if bytes, err := exec.Command("git", "log", "-1", "--pretty=%B").Output(); err == nil {
-		str := strings.TrimSpace(string(bytes))
-		re := regexp.MustCompile(`Commit (\d+) of \d+`)
+	if !*ignoreHistory {
+		fmt.Print("\033[2K\rChecking if already started...")
+		if bytes, err := exec.Command("git", "log", "-1", "--pretty=%B").Output(); err == nil {
+			str := strings.TrimSpace(string(bytes))
+			re := regexp.MustCompile(`Commit (\d+) of \d+`)
 
-		if re.MatchString(str) {
-			started = true
-			match := re.FindStringSubmatch(str)[1]
-			i, _ = strconv.Atoi(match)
-			i++
-			fmt.Printf("\033[2K\rResuming from commit #%v", i)
+			if re.MatchString(str) {
+				started = true
+				match := re.FindStringSubmatch(str)[1]
+				i, _ = strconv.Atoi(match)
+				i++
+				fmt.Printf("\033[2K\rResuming from commit #%v", i)
+			}
 		}
 	}
 	// check current commit count
-	if !started {
+	if !started && !*ignoreHistory {
 		fmt.Print("\033[2K\rCounting commits...")
 		cmd := exec.Command("git", "rev-list", "--count", "HEAD")
 		if bytes, err := cmd.Output(); err == nil {
@@ -127,15 +130,18 @@ func finalCommit() {
 	if bytes, err := exec.Command("git", "log", "-1", "--pretty=%B").Output(); err == nil {
 		str := strings.TrimSpace(string(bytes))
 
-		if str != *finalCommitMsg {
+		if str != *finalCommitMsg || *finalCommitMsg == "" {
 			if err := exec.Command("git", "add", "-A").Run(); err != nil {
 				panic("Failed to execute git add!")
 			}
 			msg := *finalCommitMsg
-			if err := exec.Command("git", "commit", "--allow-empty", "-m", msg).Run(); err != nil {
+			if err := exec.Command("git", "commit", "--allow-empty", "--allow-empty-message", "-m", msg).Run(); err != nil {
 				panic("Failed to execute git commit!")
 			}
 
+			if msg == "" {
+				msg = "Done! 😁"
+			}
 			fmt.Println("\033[2K\r" + msg)
 		} else {
 			fmt.Println("\033[2K\r" + "We already reached our goal! 😁")
